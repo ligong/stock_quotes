@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Socket Quotes </title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      var socket = io.connect('http://localhost');
+      socket.on('news', function (data) {
+      console.log(data);
+      socket.emit('my other event', { my: 'data' });
+      });
+    </script>
+  </head>
+  <body>
+    <p>Received quotes</p>
+    <p id="out"></p>
+
+  </body>
+</html>
+
+

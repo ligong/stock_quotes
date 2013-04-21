@@ -19,13 +19,13 @@ def load_stock_db(db_file="stock_db.json"):
         stock_db = json.load(f)
         return [Struct(name=name,code=code,
                        start_price=start_price,price=start_price,
-                       lowest=start_price, highest=start_price)
+                       lowest=start_price, highest=start_price,
+                       volume=0)
                 for (name,code,start_price) in stock_db if start_price >= 0.01]
 
 def gen_quotes(db):
     """Randomly generate a quote"""
 
-    # randomly pick a stock
     i = random.randint(0,len(db)-1)
     x = db[i]
 
