@@ -3,6 +3,7 @@
 import json
 import time
 import random
+from datetime import datetime
 
 class Struct:
     """Anonymous struct"""
@@ -17,10 +18,12 @@ def load_stock_db(db_file="stock_db.json"):
     """Return a list of stock object"""
     with open(db_file) as f:
         stock_db = json.load(f)
-        return [Struct(name=name,code=code,
-                       start_price=start_price,price=start_price,
-                       lowest=start_price, highest=start_price,
-                       volume=0)
+        return [Struct(
+            time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            name=name,code=code,
+            start_price=start_price,price=start_price,
+            lowest=start_price, highest=start_price,
+            volume=0)
                 for (name,code,start_price) in stock_db if start_price >= 0.01]
 
 def gen_quotes(db):

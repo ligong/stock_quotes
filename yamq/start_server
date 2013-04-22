@@ -1,0 +1,12 @@
+#!/usr/bin/env node
+
+var broker = require('./broker');
+var port;
+
+if (process.argv.length >= 3)
+   port = process.argv[2];
+else
+   port = 8124;
+   
+broker.run(port);
+

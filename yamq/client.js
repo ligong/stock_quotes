@@ -8,7 +8,6 @@ function dbg(msg)
     console.log("[debug]"+msg);
 }
 
-
 // message format,
 // length:string
 function encode_message(obj)
@@ -258,8 +257,6 @@ function make_inbox(chan,name,callback,options)
 			 callback);
 }
 
-
-
 function empty() {}
 
 // subscribe outbox for inbox,
@@ -294,7 +291,7 @@ function bind(chan,inbox,outbox,route_key,callback)
 // delete_inbox, delete_outbox, unsubscribe, unbind
 
 // send message with route_key to outbox
-function publish_message(chan,outbox_name,route_key,message)
+function publish(chan,outbox_name,route_key,message)
 {
     assert_true(chan && outbox_name);
     route_key = route_key || "";
@@ -366,25 +363,16 @@ function test()
 			 console.log("success: receive 'hello2' inbox2");
 		     }
 		    );
-    publish_message(chan,"outbox1","foo","hello");
+    publish(chan,"outbox1","foo","hello");
     
 }
 
-function test2(conn)
-{
-    var client = net.connect({port:conn.port,host:conn.host},
-			     function() { //'connect' listener
-				 console.log('client connected');
-				 client.write('world!\r\n');
+exports.make_connection = make_connection;
+exports.make_channel = make_channel;
+exports.make_inbox = make_inbox;
+exports.make_outbox = make_outbox;
+exports.subscribe = subscribe;
+exports.publish = publish;
+exports.on_inbox = on_inbox_message;
+exports.test = test;
 
-			     });
-    client.on('data', function(data) {
-		  console.log(data.toString());
-	      });
-    client.on('end', function() {
-		  console.log('client disconnected');
-	      });
-}
-
-//test2(make_connection("127.0.0.1",8124));
-test();

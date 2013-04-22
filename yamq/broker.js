@@ -650,12 +650,12 @@ function send_to_inbox(inbox,message)
     }
 }
 
-function main()
+function run(port)
 {
+    port = port || 8124;
     var server = net.createServer(on_connect);
-
-    server.listen(8124, function() { //'listening' listener
-		      console.log('server bound');
+    server.listen(port, function() { //'listening' listener
+		      console.log('server bound to port:'+port );
 		  });
 }
 
@@ -895,7 +895,6 @@ function test_unsubscribe()
     assert_true(g_inbox_to_outbox[inbox1.name] == undefined);
     assert_true(g_outbox_to_inbox[outbox1.name] == undefined);
 
-
 }
 
 function test_process_data()
@@ -1035,7 +1034,7 @@ function test()
 
 }
 
-main();
-//test();
+exports.run = run;
+exports.test = test;
 
 
