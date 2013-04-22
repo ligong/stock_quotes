@@ -3,6 +3,12 @@ var assert_true = require("assert").ok;
 
 var g_channel_db = { };
 
+function dbg(msg)
+{
+    console.log("[debug]"+msg);
+}
+
+
 // message format,
 // length:string
 function encode_message(obj)
@@ -12,27 +18,27 @@ function encode_message(obj)
 }
 
 // return channel's unique id
-function socket_id(channel)
+function channel_id(chan)
 {
-    assert_true(channel);
-    var s = channel.socket;
+    assert_true(chan);
+    var s = chan.socket;
     return (s.remoteAddress + ":" + s.remotePort +
 	    ":" + s.localAddress + ":" + s.localPort);
 }
 
 // add channel to db
-function channel_db_add(channel)
+function channel_db_add(chan)
 {
-    assert_true(channel);
-    var id = socket_id(channel);
-    g_channel_db[id] = channel;
+    assert_true(chan);
+    var id = channel_id(chan);
+    g_channel_db[id] = chan;
 }
 
 // remove channel from db
-function channel_db_remove(channel)
+function channel_db_remove(chan)
 {
-    assert_true(channel);
-    var id = socket_id(channel);
+    assert_true(chan);
+    var id = channel_id(chan);
     delete g_channel_db[id];
 }
 
@@ -49,153 +55,185 @@ function make_channel(connection)
     // mutex/demutex not implemented yet,poor performance
     // use a dedicated TCP for each channel
 
-    var channel = {socket: null,
-		   buf:"",             // receive data buffer
-		   inbox:{},           // inbox created
+    var chan = {socket: null,
+		   data:"",              // receive data buffer
+		   inbox:{},             // inbox created
 		   reply_callback:{},    // map msg_id to response callback
-		   next_id:1,          // generate msg_id
-		   pending:[],         // buffer for writing
-		   connected: false};  // socket status
-    
-    var socket = net.connect({
-				 host:connection.host,
-				 port:connection.port
-			     },
+		   next_id:1,            // generate msg_id
+		   pending:[],           // buffer for writing
+		   connected: false};    // socket status
+
+    var socket = net.connect({port:connection.port,
+			      host:connection.host},
 			     function() { //'connect' listener
 				 var i;
-				 console.log("client connected to:"
-					     + connection.host + ":"
-					     + connection.port
-					    );
-				 channel.connected = true;
-				 for(i = 0; i < channel.pending.length; i++) {
-				     socket.write(channel.pending[i]);
+				 dbg("client connected to:"
+				     + connection.host + ":"
+				     + connection.port
+				    );
+				 chan.connected = true;
+				 for(i = 0; i < chan.pending.length; i++) {
+				     socket.write(chan.pending[i]);
 				 }
+				 chan.pending = [];
 			     });
 
-    channel.socket = socket;
+    chan.socket = socket;
     
-//    channel_db_add(conn);
-
-    channel.socket.on('data', function(data) {
-		       channel.buf += data;
-		       channel_process_data(channel);
+    chan.socket.on('data', function(data) {
+		       dbg("data:"+data);
+		       chan.data += data;
+		       channel_process_data(chan);
 		   });
     
-    channel.socket.on('end', function() {
-			  console.log('client disconnected');
-			  channel.connected = false;
+    chan.socket.on('end', function() {
+			  dbg('client disconnected');
+			  chan.connected = false;
 		      });
     
-    return channel;
+    return chan;
 }
 
 // log corrupted msg to console
-function log_corrupt_msg(channel,msg)
+function log_corrupt_msg(msg)
 {
-    console.log("Recv corrupted message: server:" + channel.socket.remoteAddr + " port:" + channel.socket.remotePort + ":" + msg);
+    console.log("[warn] Recv corrupted message:" + msg);
 }
 
-// process new received data
-function channel_process_data(channel)
+// decode and remove message from buffer obj[attr]
+function remove_message(obj,attr)
 {
+    attr = attr || "data";
+    
+    var data = obj[attr];
     var size;
     var msg;
     var msg_str;
-    var i = channel.data.indexOf(":");
+    var i = data.indexOf(":");
     var j;
     var inbox;
     
-    if (i <= 0) return;
-    size = parseint(channel.data.slice(0,i));
+    if (i <= 0) {
+	if(isNaN(parseInt(data)))
+	    obj[attr] = "";
+	return null;
+    }
+    size = parseInt(data.slice(0,i));
     if (typeof(size) != "number") {
 	// message is corrupt
-	log_corrupt_msg(channel,channel.data);
-	channel.data = ""; // reset it
+	log_corrupt_msg(data);
+	obj[attr] = ""; // reset it
+	return null;
     }
 	
-    if ((i+1+size) > channel.data.length) // waiting for more data
-	return;
+    if ((i+1+size) > data.length) // waiting for more data
+	return null;
     
-    msg_str = channel.data.slice(i+1,i+1+size);
-    channel.data = channel.data.slice(i+1+size);
+    msg_str = data.slice(i+1,i+1+size);
+    obj[attr] = data.slice(i+1+size);
     try {
 	msg = JSON.parse(msg_str);
     } catch (err) {
-	log_corrupt_msg(channel,msg_str);
-	return;
+	log_corrupt_msg(msg_str);
+	obj[attr] = "";
+	return null;
     }
+
+    return msg;
+}
+
+// process new received data
+
+function channel_process_data(chan)
+{
+    while(channel_process_one_msg(chan))
+	;
+}
+
+function is_array(x)
+{
+    return typeof(x) == "object" && typeof(x.length) == "number";
+}
+
+function channel_process_one_msg(chan)
+{
+    var msg = remove_message(chan,"data");
+    var j;
+    var inbox;
+
+    if (!(msg && msg.body))
+	return false;
 
     if (typeof(msg.id) == "number" &&
-	typeof(channel.reply_callback[msg.id]) == "function") {
-	channel.reply_callback[msg.id](msg.body);
-	delete channel.reply_callback[msg.id];
+	typeof(chan.reply_callback[msg.id]) == "function") {
+	chan.reply_callback[msg.id](msg.body);
+	delete chan.reply_callback[msg.id];
     }
-
     if (typeof(msg.body) == "object" &&
 	msg.body.method == "publish") {
-	if (typeof(msg.body.name) == "string" &&
+	if (typeof(msg.body.inbox) == "string" &&
 	    msg.body.body != undefined) {
-	    
-	    inbox = channel.inbox[msg.body.name];
+	    inbox = chan.inbox[msg.body.inbox];
 	    if (is_array(inbox)) {
 		for(j = 0; j < inbox.length; j++)
 		    inbox[j](msg.body.body);
 	    }
 	} else {
-	    log_corrupt_msg(channel,msg_str);
+	    log_corrupt_msg(chan,msg_str);
 	}
     }
+    return true;
 }
 
- function channel_next_id(channel)
+var MAX_ID = Math.floor(Number.MAX_VALUE / 10);
+function channel_next_id(chan)
 {
-    channel.next_id += 1;
-    if (channel.next_id < 1)
-	channel.next_id = 1;
-    return channel.next_id;
+    chan.next_id = (chan.next_id + 1) % MAX_ID;
+    return chan.next_id;
 }
 
-function channel_send_message(channel,msg_body,callback)
+function channel_send_message(chan,msg_body,callback)
 {
-    var msg_id = callback? channel_next_id(channel):-1;
+    var msg_id = callback? channel_next_id(chan):-1;
     var msg = encode_message({body:msg_body,
 			    id:msg_id});
     if (callback) {
-	channel.reply_callback[msg_id] = callback;
+	chan.reply_callback[msg_id] = callback;
     }
-    if (channel.connected) {
-	channel.socket.write(msg);	
+    if (chan.connected) {
+	chan.socket.write(msg);	
     } else {
-	channel.pending.push(msg);
+	chan.pending.push(msg);
     }
 }
 
-function default_options(options,defaults)
+// add default attribute if missing in object
+
+function add_default(obj,defaults)
 {
     var attr;
-    options = options || {};
+    obj = obj || {};
     for(attr in defaults) {
 	if (defaults.hasOwnProperty(attr)) {
-	    if (options[attr] == undefined)
-		options[attr] = defaults[attr];
+	    if (obj[attr] == undefined)
+		obj[attr] = defaults[attr];
 	    }
     }
-    return options;
+    return obj;
 }
 
 // create outbox
 // if the named outbox already exist, just return it and no new one is created
-// optional options is: {type:"fanout"(default)|"direct",del_when_no_connection: boolean(default is true)}
+// optional options is: {type:"fanout"(default)|"direct"}
 // callback(result) will be called
 // result is {code: "ok"|failure_reason, name: outbox_name}
 // [fixme] direct type is not support yet
-function make_outbox(channel,name,callback,options)
+function make_outbox(chan,name,callback,options)
 {
-    assert_true(channel && name && callback);
-    options = default_options(options,{type:"fanout",
-				       del_when_no_connection: true});
-    channel_send_message(channel,
+    assert_true(chan && name && callback);
+    options = add_default(options,{type:"fanout"});
+				 
+    channel_send_message(chan,
 			 {method:"make_outbox",name:name,options:options},
 			 callback);
 }
@@ -206,16 +244,16 @@ function make_outbox(channel,name,callback,options)
 // if name is empty string, broker will create a unique one
 // callback(result) will be called
 // result is {code: "ok"|failure_reason, name: inbox_name}
-function make_inbox(channel,name,callback,options)
+function make_inbox(chan,name,callback,options)
 {
-    assert_true(channel && typeof(name)=="string" && callback);
-    options = default_options(options,{del_when_no_connection: true,
-				       drop_policy:"drop_all",
-				       max_queue:2000,
-				       max_socket_size:10000});
-    
-    if (channel[inbox] == undefined) channel[inbox] = [];
-    channel_send_message(channel,
+    assert_true(chan && typeof(name)=="string" && callback);
+    options = add_default(options,{del_when_no_connection: true,
+				   drop_policy:"drop_all",
+				   max_queue:2000});
+
+    // hold callback for this inbox
+    if (chan.inbox[name] == undefined) chan.inbox[name] = []; 
+    channel_send_message(chan,
 			{method:"make_inbox",name:name,options:options},
 			 callback);
 }
@@ -229,11 +267,11 @@ function empty() {}
 // subscribed to it
 // callback(result) will be called
 // result is {code: "ok"|failure_reason}
-function subscribe(channel,inbox,outbox,callback)
+function subscribe(chan,inbox,outbox,callback)
 {
-    assert_true(channel && inbox && outbox);
+    assert_true(chan && inbox && outbox);
     callback = callback || empty;
-    channel_send_message(channel,
+    channel_send_message(chan,
 			{method:"subscribe",inbox:inbox,outbox:outbox},
 			 callback);
 }
@@ -242,12 +280,12 @@ function subscribe(channel,inbox,outbox,callback)
 // message sent to outbox will be published to all inbox according to route_key
 // callback(result) will be called
 // result is {code: "ok"|failure_reason}
-function bind(channel,inbox,outbox,route_key,callback)
+function bind(chan,inbox,outbox,route_key,callback)
 {
     // [fixme] not implement yet
-    // assert_true(channel && inbox && outbox);
+    // assert_true(chan && inbox && outbox);
     // callback = callback || empty;
-    // channel_send_message(channel,
+    // chan_send_message(chan,
     // 			{method:"subscribe",inbox:inbox,outbox:outbox},
     // 			 callback);
 }
@@ -256,14 +294,14 @@ function bind(channel,inbox,outbox,route_key,callback)
 // delete_inbox, delete_outbox, unsubscribe, unbind
 
 // send message with route_key to outbox
-function publish_message(channel,outbox_name,route_key,message)
+function publish_message(chan,outbox_name,route_key,message)
 {
-    assert_true(channel && outbox);
+    assert_true(chan && outbox_name);
     route_key = route_key || "";
     message = message || "";
-    channel_send_message(channel,
+    channel_send_message(chan,
 			{method:"publish",
-			 outbox_name:outbox_name,
+			 outbox:outbox_name,
 			 route_key:route_key,
 			 body:message});
 }
@@ -271,11 +309,82 @@ function publish_message(channel,outbox_name,route_key,message)
 // bind a callback with the named inbox
 // When a message is delivered to inbox,
 // call callback(message_body)
-function on_inbox_message(channel,name,callback)
+function on_inbox_message(chan,name,callback)
 {
-    assert_true(channel && name && callback);
-    assert_true(typeof(channel.inbox) == "object");
+    assert_true(chan && name && callback);
+    assert_true(typeof(chan.inbox) == "object");
 
-    channel.inbox[name].push(callback);
+    chan.inbox[name].push(callback);
 }
 
+function sleep(milliSeconds)
+{
+    var startTime = new Date().getTime();
+    while (new Date().getTime() < startTime + milliSeconds)	
+	;
+}
+
+// make sure server is running in port 8124
+function test()
+{
+    var conn = make_connection("127.0.0.1",8124);
+    var chan = make_channel(conn);
+    var output = null;
+
+    make_inbox(chan,"inbox1",function(result) {
+		   assert_true(result.code=="ok" && result.name=="inbox1");
+		   console.log("success: inbox1 is created");
+	       });
+
+    make_inbox(chan,"inbox2",function(result) {
+		   assert_true(result.code=="ok" && result.name=="inbox2");
+		   console.log("success: inbox2 is created");
+	       });
+    
+    make_outbox(chan,"outbox1",function(result) {
+		   assert_true(result.code=="ok" && result.name=="outbox1");
+		    console.log("success: outbox1 is created");
+	       });
+
+    subscribe(chan,"inbox1","outbox1",function(result){
+		  assert_true(result.code=="ok");
+		  console.log("success: subscribe inbox1 to outbox1");
+	      });
+
+    subscribe(chan,"inbox2","outbox1",function(result){
+		  assert_true(result.code=="ok");
+		  console.log("success: subscribe inbox2 to outbox1");
+	      });
+    
+    on_inbox_message(chan,"inbox1",function(msg) {
+			 assert_true(msg == "hello");
+			 console.log("success: receive 'hello1' inbox1");
+		     }
+		    );
+    on_inbox_message(chan,"inbox2",function(msg) {
+			 assert_true(msg == "hello");
+			 console.log("success: receive 'hello2' inbox2");
+		     }
+		    );
+    publish_message(chan,"outbox1","foo","hello");
+    
+}
+
+function test2(conn)
+{
+    var client = net.connect({port:conn.port,host:conn.host},
+			     function() { //'connect' listener
+				 console.log('client connected');
+				 client.write('world!\r\n');
+
+			     });
+    client.on('data', function(data) {
+		  console.log(data.toString());
+	      });
+    client.on('end', function() {
+		  console.log('client disconnected');
+	      });
+}
+
+//test2(make_connection("127.0.0.1",8124));
+test();
