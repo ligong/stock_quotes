@@ -80,7 +80,7 @@ function make_channel(connection)
     chan.socket = socket;
     
     chan.socket.on('data', function(data) {
-		       dbg("data:"+data);
+		       dbg("receive data:"+data);
 		       chan.data += data;
 		       channel_process_data(chan);
 		   });
@@ -247,6 +247,7 @@ function make_inbox(chan,name,callback,options)
 {
     assert_true(chan && typeof(name)=="string" && callback);
     options = add_default(options,{del_when_no_connection: true,
+                                   end_consumer_when_removed:false,
 				   drop_policy:"drop_all",
 				   max_queue:2000});
 
@@ -255,6 +256,22 @@ function make_inbox(chan,name,callback,options)
     channel_send_message(chan,
 			{method:"make_inbox",name:name,options:options},
 			 callback);
+}
+
+
+// remove inbox
+// callback(result) will be called
+// result is {code: "ok"|"fail"}
+function remove_inbox(chan,name,callback)
+{
+    assert_true(chan && typeof(name)=="string" && callback);
+    channel_send_message(chan,
+			{method:"remove_inbox",name:name},
+                         function(result) {
+                             callback(result);
+                             console.log("foo");
+                             delete chan.inbox[name];
+                         });
 }
 
 function empty() {}
@@ -272,6 +289,20 @@ function subscribe(chan,inbox,outbox,callback)
 			{method:"subscribe",inbox:inbox,outbox:outbox},
 			 callback);
 }
+
+
+// unsubscribe inbox to outbox
+// callback(result) will be called
+// result is {code: "ok"|failure_reason}
+function unsubscribe(chan,inbox,outbox,callback)
+{
+    assert_true(chan && inbox && outbox);
+    callback = callback || empty;
+    channel_send_message(chan,
+			{method:"unsubscribe",inbox:inbox,outbox:outbox},
+			 callback);
+}
+
 
 // bind inbox to outbox, create direct routing
 // message sent to outbox will be published to all inbox according to route_key
@@ -364,14 +395,28 @@ function test()
 		     }
 		    );
     publish(chan,"outbox1","foo","hello");
-    
+    unsubscribe(chan,"inbox2","outbox1",function(result) {
+                    assert_true(result.code=="ok");
+                    console.log("success: unsubscribe inbox2 to outbox1");
+                });
+
+    unsubscribe(chan,"inbox2","outbox1",function(result) {
+                    assert_true(result.code=="ok");
+                    console.log("success: unsubscribe inbox2 to outbox1 twice");
+                });
+    remove_inbox(chan,"inbox2",function(result) {
+                     assert_true(result.code=="ok");
+                     console.log("success: remove_inbox2");
+                 });
 }
 
 exports.make_connection = make_connection;
 exports.make_channel = make_channel;
 exports.make_inbox = make_inbox;
+exports.remove_inbox = remove_inbox;
 exports.make_outbox = make_outbox;
 exports.subscribe = subscribe;
+exports.unsubscribe = unsubscribe;
 exports.publish = publish;
 exports.on_inbox = on_inbox_message;
 exports.test = test;

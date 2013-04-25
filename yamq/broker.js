@@ -163,6 +163,21 @@ function process_one_msg(c)
 	else
 	    reply = make_reply(msg,{code: "fail"});
 	c.write(encode_message(reply));
+    } else if (method == "unsubscribe") {
+        x = unsubscribe(msg.body.inbox,msg.body.outbox);
+        if (x)
+            reply = make_reply(msg,{code: "ok"});
+        else
+            reply = make_reply(msg,{code: "fail"});
+        c.write(encode_message(reply));
+    } else if (method == "remove_inbox") {
+        remove_inbox(msg.body.name,
+                     function(x) {
+                         if (x)
+                             reply = make_reply(msg,{code: "ok"});
+                         else
+                             reply = make_reply(msg,{code: "fail"});
+                         c.write(encode_message(reply));});
     } else if (method == "publish") {
 	publish_message(msg.body.outbox,msg.body.route_key,msg.body.body);
 	// no reply needed
@@ -363,14 +378,18 @@ function make_fake_socket(ip,port)
     };
 }
 
-function remove_inbox(inbox)
+function remove_inbox(inbox,next)
 {
     var outboxs;
     var i;
     
     if (typeof(inbox) == "string")
 	inbox = g_inbox[inbox];
-    assert_true(inbox);
+    if (!inbox) {
+        if (next) next(false);
+        return false;
+    }
+
     outboxs = g_inbox_to_outbox[inbox.name];
     if (outboxs == undefined) {
 	;
@@ -382,15 +401,18 @@ function remove_inbox(inbox)
 	}
     }
 
+    if (next)
+        next(true);
+    
     if (inbox.consumer) {
 	for(i = 0; i < inbox.consumer.length; i++) {
-	    inbox.consumer[i].end();
+            if (inbox.options.end_consumer_when_removed)
+	        inbox.consumer[i].end();
 	}
     }
-
     delete g_inbox[inbox.name];
     
-	
+    return true;
 }
 
 function inbox_remove_consumer(socket)
@@ -400,7 +422,7 @@ function inbox_remove_consumer(socket)
     var i,j;
     
     if ((inbox_names = g_socketid_to_inbox[id]) == undefined) {
-	console.log("Error:inbox_remove_consumer: sock id missing in \
+	console.log("Warn:inbox_remove_consumer: sock id missing in \
 		    index g_socketid_to_inbox:" + id);
 	return false;
     }
@@ -408,7 +430,7 @@ function inbox_remove_consumer(socket)
     for(i = 0; i < inbox_names.length; i++) {
 	name = inbox_names[i];
 	if ((inbox = g_inbox[name]) == undefined) {
-	    console.log("Error:inbox_remove_consumer:key missing in g_inbox:"
+	    console.log("Warn:inbox_remove_consumer:key missing in g_inbox:"
 			+ name );
 	    continue;
 	}

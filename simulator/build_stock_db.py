@@ -7,7 +7,7 @@ import time
 import sys
 import json
 
-# Try MAX_GET times before declare crawling web fail
+# Try MAX_GET times before declare http get fail
 MAX_GET = 3  
 
 def dbg(fmtstr,*args):

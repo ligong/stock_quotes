@@ -10,7 +10,6 @@ var rd = readline.createInterface({
     terminal: false
 });
 
-
 var host;
 var port;
 
