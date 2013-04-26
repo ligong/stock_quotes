@@ -95,6 +95,12 @@ function on_subscribe(data)
                                    outbox_name,
                                   make_result_checker(p2));
                 });
+
+    socket.subscribe.forEach(function(x) {
+                                 var quotes = g_stock_db[x];
+                                 if (quotes)
+                                     socket.emit("quotes",quotes);
+                                 });
 }
 
 function get_inbox_name(id)

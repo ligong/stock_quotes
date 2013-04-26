@@ -1,6 +1,31 @@
 extends layout
 
 block content
-  h1= title
-  p Welcome to #{title}
+  div.container
+    div.row
+      div(class="offset2 span4")
+        div.head
+          h3.muted 股票行情查询
+    div.row
+      div(class="offset2 span4")
+        form.form-inline
+          input.input-small(id="input_code",type="text",placeholder="股票代码")
+          span 
+          button.btn(type="submit",id="add_code") 查询
+    div.row
+      div(class="offset2 span4")
+        table.table
+          thead
+            tr
+              th 代码
+              th 名称
+              th 当前价
+              th 最高价
+              th 最低价
+              th 成交量
+          tbody#stocks
+            
+        
+  script(type='text/javascript', src='/bootstrap/js/jquery.js')
+  script(type='text/javascript',src='/socket.io/socket.io.js')
   script(type='text/javascript',src='/js/stock.js')
