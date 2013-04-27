@@ -198,17 +198,34 @@ function on_connect(c)
     c.on("data", function(data) {
 	     dbg('low',"data:"+data);
 	     c.yamq_data += data;
-	     process_data(c);
+             try {
+	         process_data(c);                 
+             } catch (x) {
+                 console.log("[Exception]:process_data:"+JSON.stringify(x));
+             }
+
 	 });
 	 
     c.on("end", function() {
 	     dbg('mid',"socket end:" + socket_id(c));
-	     inbox_remove_consumer(c);
+             try {
+                 inbox_remove_consumer(c);    
+             } catch (x) {
+                 console.log("[Exception]:inbox_remove_consumer:"+
+                             JSON.stringify(x));
+             }
+	     
     	 });
 
     c.on("drain", function() {
 	     dbg('mid',"socket drain:" + socket_id(c));
-	     process_drain(c);
+             try {
+	         process_drain(c);                 
+             } catch (x) {
+                 console.log("[Exception]:process_drain:"+
+                             JSON.stringify(x));
+             }
+
 	 });
 }
 
@@ -683,6 +700,9 @@ function run(port)
 {
     port = port || 8124;
     var server = net.createServer(on_connect);
+    server.on("error",function (e) {
+                  console.log("Server Error:"+JSON.stringify(e));
+              });
     server.listen(port, function() { //'listening' listener
 		      console.log('server bound to port:'+port );
 		  });

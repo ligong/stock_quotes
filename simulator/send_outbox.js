@@ -35,14 +35,15 @@ function run() {
 	  }
 	  if (msg) {
 	      var outbox = "stock_quotes_" + msg.code;
-	      if (g_inbox[outbox] == undefined) {
+	      if (g_inbox[outbox] != "ok") {
 		  yamq.make_outbox(chan,outbox,function(result){
 				       g_inbox[outbox] = result.code;
 				   });
 		  g_inbox[outbox] = "waiting";
-	      }
-	      yamq.publish(chan,outbox,"",msg);
-	      yamq.publish(chan,"stock_quotes","",msg);
+	      } else {
+	          yamq.publish(chan,outbox,"",msg);
+	          yamq.publish(chan,"stock_quotes","",msg);
+              }
 	  }
       });
 
