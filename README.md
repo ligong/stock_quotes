@@ -2,6 +2,7 @@
 
 ## 安装使用
 1. 按照 nodejs,npm, 要求node用0.10以上版本
+
 $node --version   # 检查版本
 v0.10.5
 
@@ -10,18 +11,23 @@ $git clone http://www.github.com/ligong/stock_quotes
 
 3. 启动消息服务器
 $cd stock_quotes/yamq
+
 $./start_server
 
 4. 启动数据模拟
 $cd stock_quotes/simulator
+
 $./simulator
 
 5. 启动web应用
 $cd stock_quotes/webapp
+
 $node app.js
 
 6. 在浏览器输入 http://localhost:3000/
+
    随意输入有效的A股代码, e.g. 600070
+   
    可以观察到数据的实时更新
 
 ## 代码结构
