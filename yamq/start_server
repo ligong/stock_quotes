@@ -3,6 +3,8 @@
 var broker = require('./broker');
 var port;
 
+require('./debug').debug('mid');
+
 if (process.argv.length >= 3)
    port = process.argv[2];
 else

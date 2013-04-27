@@ -1,6 +1,7 @@
 var net = require('net');
 var assert_true = require("assert").ok;
-
+var dbg = require("./debug").dbg;
+var fmt = require("util").format;
 
 var g_inbox = {};
 var g_outbox = {};
@@ -16,6 +17,8 @@ var g_socketid_to_inbox = {}; // map socketid to all connected inbox
 var MAX_SOCKET_BUFFER_SIZE = 10000; // stop sending to socket if 
                                     // its buffer size >= it
 
+
+
 function global_data_reset()
 {
     g_inbox = {};
@@ -23,11 +26,6 @@ function global_data_reset()
     g_inbox_to_outbox = {};
     g_outbox_to_inbox = {};
     g_socketid_to_inbox = {};
-}
-
-function dbg(msg)
-{
-    console.log("[debug]"+msg);
 }
 
 
@@ -195,21 +193,21 @@ function on_connect(c)
     c.yamq_data = "";
     c.yamq_socket_id = gen_next_socket_id();
 
-    dbg("connect");
-    dbg(c.address().port+":"+c.address().address);
+    dbg("mid","connect");
+    dbg("mid",c.address().port+":"+c.address().address);
     c.on("data", function(data) {
-	     dbg("data:"+data);
+	     dbg('low',"data:"+data);
 	     c.yamq_data += data;
 	     process_data(c);
 	 });
 	 
     c.on("end", function() {
-	     dbg("socket end:" + socket_id(c));
+	     dbg('mid',"socket end:" + socket_id(c));
 	     inbox_remove_consumer(c);
     	 });
 
     c.on("drain", function() {
-	     dbg("socket drain:" + socket_id(c));
+	     dbg('mid',"socket drain:" + socket_id(c));
 	     process_drain(c);
 	 });
 }
@@ -217,6 +215,7 @@ function on_connect(c)
 
 function process_drain(socket)
 {
+    dbg("mid","process_drain");
     var id = socket_id(socket);
     var inbox_names = g_socketid_to_inbox[id];
     var inboxs = [];  // inboxs with msg pending
@@ -305,6 +304,7 @@ function obj_cmp1(obj1,obj2)
 
 function make_inbox(name,options)
 {
+    dbg("mid","make_inbox:"+name+":"+JSON.stringify(options));
     var inbox;
     if (name != "") {
 	if (g_inbox[name] != undefined)
@@ -326,6 +326,7 @@ function make_inbox(name,options)
 
 function make_outbox(name,options)
 {
+    dbg("mid","make_outbox:"+name+":"+JSON.stringify(options));
     var outbox;
     if (name != "") {
 	if (g_outbox[name] != undefined) {
@@ -355,7 +356,7 @@ function socket_id(socket)
 
 function inbox_add_consumer(inbox,socket)
 {
-    dbg("inbox_add_consumer");
+    dbg('mid',"inbox_add_consumer");
     if (typeof(inbox) == "string")
 	inbox = g_inbox[inbox];
 
@@ -382,6 +383,7 @@ function remove_inbox(inbox,next)
 {
     var outboxs;
     var i;
+    dbg('mid',"remove_inbox:"+JSON.stringify(inbox));
     
     if (typeof(inbox) == "string")
 	inbox = g_inbox[inbox];
@@ -396,8 +398,11 @@ function remove_inbox(inbox,next)
     } else if (outboxs.length == 0) {
 	delete g_inbox_to_outbox[inbox.name];
     } else {
-	for(i = 0; i < outboxs.length; i++) {
-	    unsubscribe(inbox,outboxs[i]);
+        // must clone outboxs, because it
+        // will be changed in unsubscribe
+        var outboxs2 = outboxs.slice(0);
+	for(i = 0; i < outboxs2.length; i++) {
+	    unsubscribe(inbox,outboxs2[i]);
 	}
     }
 
@@ -417,12 +422,12 @@ function remove_inbox(inbox,next)
 
 function inbox_remove_consumer(socket)
 {
+    dbg("mid","inbox_remove_consumer");
     var id = socket_id(socket);
     var inbox_names, name,inbox;
     var i,j;
-    
     if ((inbox_names = g_socketid_to_inbox[id]) == undefined) {
-	console.log("Warn:inbox_remove_consumer: sock id missing in \
+	dbg("mid","inbox_remove_consumer: sock id missing in \
 		    index g_socketid_to_inbox:" + id);
 	return false;
     }
@@ -453,7 +458,7 @@ function inbox_remove_consumer(socket)
 function subscribe(inbox,outbox)
 {
 
-    dbg("subscribe:"+inbox+":"+outbox);
+    dbg('mid',"subscribe:"+inbox+":"+outbox);
     if (typeof(inbox) == "object")
 	inbox = inbox.name;
     if (typeof(outbox) == "object")
@@ -543,12 +548,14 @@ function obj_array_del(obj,arr_name,x)
 function unsubscribe(inbox,outbox)
 {
     var arr;
-    
+
     if (typeof(inbox) == "object")
 	inbox = inbox.name;
     if (typeof(outbox) == "object")
 	outbox = outbox.name;
 
+    dbg('mid',"unsubscribe:inbox("+inbox+"):outbox("+outbox+")");
+    
     if (g_inbox[inbox] == undefined) {
 	console.log("unsubscribe: " + inbox + ":missing in g_inbox");
 	return false;
@@ -580,7 +587,7 @@ function is_target(inbox,route_key)
 
 function publish_message(outbox,route_key,message)
 {
-    dbg("publish message:"+message);
+    dbg("low","publish message:"+message);
     var ob = g_outbox[outbox];
     var inbox_names = g_outbox_to_inbox[outbox];
     var inbox,inbox_name,i,x;
@@ -603,7 +610,7 @@ function publish_message(outbox,route_key,message)
 	inbox_name = inbox_names[i];
 	inbox = g_inbox[inbox_name];
 	if (inbox == undefined) {
-	    console.log("Error:publish_message:"+inbox+":missing in g_inbox");
+	    console.log(fmt("Error:publish_message:outbox(%s):inbox(%s) missing in g_inbox",outbox,inbox));
 	} else if (fanout || is_target(inbox,route_key)) {
 	    send_to_inbox(inbox,encode_publish_message(inbox_name,message));
 	}
@@ -641,7 +648,7 @@ function choose_consumer(inbox)
 
 function send_to_inbox(inbox,message)
 {
-    dbg("send_to_inbox:" + message);
+    dbg("low","send_to_inbox:" + message);
     var consumer;  // consumer socket
     var policy;
 
@@ -662,7 +669,7 @@ function send_to_inbox(inbox,message)
 		inbox.queue.shift();
 		inbox.queue.push(message);
 	    } {// else drop the new one
-		dbg("drop message:" + message);
+		dbg("mid","drop message:" + message);
 	    }
 	} else { // buf is available
 	    inbox.queue.push(message);

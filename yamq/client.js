@@ -1,12 +1,7 @@
 var net = require("net");
 var assert_true = require("assert").ok;
-
+var dbg = require("./debug").dbg;
 var g_channel_db = { };
-
-function dbg(msg)
-{
-    console.log("[debug]"+msg);
-}
 
 // message format,
 // length:string
@@ -66,10 +61,10 @@ function make_channel(connection)
 			      host:connection.host},
 			     function() { //'connect' listener
 				 var i;
-				 dbg("client connected to:"
+				 dbg("mid",
+                                     "client connected to:"
 				     + connection.host + ":"
-				     + connection.port
-				    );
+				     + connection.port);
 				 chan.connected = true;
 				 for(i = 0; i < chan.pending.length; i++) {
 				     socket.write(chan.pending[i]);
@@ -80,18 +75,18 @@ function make_channel(connection)
     chan.socket = socket;
     
     chan.socket.on('data', function(data) {
-		       dbg("receive data:"+data);
+		       dbg("low","receive data:"+data);
 		       chan.data += data;
 		       channel_process_data(chan);
 		   });
     
     chan.socket.on('end', function() {
-			  dbg('client disconnected');
+			  dbg("mid",'client disconnected');
 			  chan.connected = false;
 		      });
-    
     return chan;
 }
+                           
 
 // log corrupted msg to console
 function log_corrupt_msg(msg)
@@ -420,4 +415,6 @@ exports.unsubscribe = unsubscribe;
 exports.publish = publish;
 exports.on_inbox = on_inbox_message;
 exports.test = test;
+
+                           
 

@@ -1,4 +1,6 @@
-var socket = io.connect("http://localhost");
+var g_web_server = "http://localhost:3000";
+
+var socket = io.connect(g_web_server);
 
 var g_connected = false;
 
@@ -19,19 +21,20 @@ socket.on("disconnect", on_disconnect);
 socket.on("quotes",function(data) {
               if (!data ||
                   g_stock.indexOf(data.code) == -1) {
-                  console.log("receive invalid quotes:"+data);
+                  console.log("receive invalid quotes:"+
+                              JSON.stringify(data));
                   return;
               }
 
               var row = build_quotes_row(data);
-              console.log(row);
               var old_row = $("#"+row.attr("id"));
               old_row.replaceWith(row);
-              
-              // var p = document.createElement("p");
-              // var text = document.createTextNode(JSON.stringify(data));
-              // p.appendChild(text);
-              // document.body.appendChild(p);
+          });
+socket.on("error", function(msg) {
+              alert("Error occurs:"+msg);
+          });
+socket.on("connect_failed", function(msg) {
+              alert("connect_failed:"+msg);
           });
 
 var g_stock = [];
@@ -54,9 +57,20 @@ function add_stock(stocks,code)
 }
 
 
-function refresh_table(stocks)
+function mkarray(x)
 {
-    $("#stocks").empty();
+    if (typeof(x) == "object" &&
+        typeof(x.length) == "number")
+        return x;
+    else
+        return [x];
+}
+
+function refresh_table(stocks,clear)
+{
+    if (clear)
+        $("#stocks").empty();
+    stocks = mkarray(stocks);
     stocks.forEach(function(stock) {
                        var row = build_quotes_row(stock);
                        if (row)
@@ -67,10 +81,11 @@ function refresh_table(stocks)
 function add_code()
 {
     var n = $("#input_code").val();
+    var row;
     if (is_valid_stock_code(n)) {
         if (add_stock(g_stock,n)) {
             subscribe(g_stock);
-            refresh_table(g_stock.map(function(code){return {code:code};}));
+            refresh_table({code:n});
         }
     } else {
         alert("请输入正确的股票代码。例如,600019");
@@ -122,7 +137,7 @@ $(function() {
           function (event) {
               if (event.which == 13) {
                   add_code();
-                  $("input_code").val("");
+                  $("#input_code").val("");
                   event.preventDefault();
               }});
 

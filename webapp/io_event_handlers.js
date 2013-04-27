@@ -1,5 +1,7 @@
 var assert_true = require("assert").ok;
 var yamq = require("../yamq/client");
+var dbg = require("../yamq/debug").dbg;
+
 
 // setup message queue
 var g_conn = yamq.make_connection("localhost",8124);
@@ -96,6 +98,7 @@ function on_subscribe(data)
                                   make_result_checker(p2));
                 });
 
+    socket.subscribe = data;
     socket.subscribe.forEach(function(x) {
                                  var quotes = g_stock_db[x];
                                  if (quotes)
@@ -110,7 +113,7 @@ function get_inbox_name(id)
 
 function on_connection(socket)
 {
-    console.log("connect");
+    dbg("mid","connect to socket");
     assert_true(socket.subscribe == undefined);
     assert_true(socket.inbox_id == undefined);
     assert_true(socket.inbox_name == undefined);

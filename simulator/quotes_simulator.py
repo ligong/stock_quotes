@@ -26,10 +26,13 @@ def load_stock_db(db_file="stock_db.json"):
             volume=0)
                 for (name,code,start_price) in stock_db if start_price >= 0.01]
 
-def gen_quotes(db):
-    """Randomly generate a quote"""
+def gen_quotes(db,i=-1):
+    """Randomly generate a quote,
+    if i>=0,generate db[i]'s quotes,
+    else generate a random stock's quotes"""
 
-    i = random.randint(0,len(db)-1)
+    if i<0:
+        i = random.randint(0,len(db)-1)
     x = db[i]
 
     # New price change is based on last one, a random walk process
@@ -58,10 +61,16 @@ def main():
 
     stock_db = load_stock_db()
     assert(len(stock_db) > 2000)
-    
+
+    # generate quotes for everyone
+    for i in range(len(stock_db)):
+        quotes = gen_quotes(stock_db,i);
+        print_quotes(quotes);
+
+    # random generate
     while True:
         quotes = gen_quotes(stock_db)
-        time.sleep(random.random()*0.01) # sleeptime is within 10ms
+        time.sleep(0.001) 
         print_quotes(quotes)
 
 if __name__ == "__main__":

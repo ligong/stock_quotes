@@ -5,7 +5,10 @@ block content
     div.row
       div(class="offset2 span4")
         div.head
-          h3.muted 股票行情查询
+          ul(class="nav nav-pills pull-right")
+            li.active
+              a(href="https://github.com/ligong/stock_quotes") github代码
+          h3.muted 股票行情查询 
     div.row
       div(class="offset2 span4")
         form.form-inline
@@ -24,7 +27,6 @@ block content
               th 最低价
               th 成交量
           tbody#stocks
-            
         
   script(type='text/javascript', src='/bootstrap/js/jquery.js')
   script(type='text/javascript',src='/socket.io/socket.io.js')
