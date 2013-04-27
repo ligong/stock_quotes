@@ -2,6 +2,7 @@ var net = require("net");
 var assert_true = require("assert").ok;
 var dbg = require("./debug").dbg;
 var g_channel_db = { };
+var remove_message = require('./util').remove_message;
 
 // message format,
 // length:string
@@ -94,47 +95,6 @@ function log_corrupt_msg(msg)
     console.log("[warn] Recv corrupted message:" + msg);
 }
 
-// decode and remove message from buffer obj[attr]
-function remove_message(obj,attr)
-{
-    attr = attr || "data";
-    
-    var data = obj[attr];
-    var size;
-    var msg;
-    var msg_str;
-    var i = data.indexOf(":");
-    var j;
-    var inbox;
-    
-    if (i <= 0) {
-	if(isNaN(parseInt(data)))
-	    obj[attr] = "";
-	return null;
-    }
-    size = parseInt(data.slice(0,i));
-    if (typeof(size) != "number") {
-	// message is corrupt
-	log_corrupt_msg(data);
-	obj[attr] = ""; // reset it
-	return null;
-    }
-	
-    if ((i+1+size) > data.length) // waiting for more data
-	return null;
-    
-    msg_str = data.slice(i+1,i+1+size);
-    obj[attr] = data.slice(i+1+size);
-    try {
-	msg = JSON.parse(msg_str);
-    } catch (err) {
-	log_corrupt_msg(msg_str);
-	obj[attr] = "";
-	return null;
-    }
-
-    return msg;
-}
 
 // process new received data
 
@@ -264,7 +224,6 @@ function remove_inbox(chan,name,callback)
 			{method:"remove_inbox",name:name},
                          function(result) {
                              callback(result);
-                             console.log("foo");
                              delete chan.inbox[name];
                          });
 }
@@ -347,6 +306,7 @@ function sleep(milliSeconds)
 	;
 }
 
+
 // make sure server is running in port 8124
 function test()
 {
@@ -399,9 +359,13 @@ function test()
                     assert_true(result.code=="ok");
                     console.log("success: unsubscribe inbox2 to outbox1 twice");
                 });
+
+
+    // this must be the last case, it calls chan.end()
     remove_inbox(chan,"inbox2",function(result) {
                      assert_true(result.code=="ok");
                      console.log("success: remove_inbox2");
+                     chan.socket.end();
                  });
 }
 

@@ -2,6 +2,8 @@ var net = require('net');
 var assert_true = require("assert").ok;
 var dbg = require("./debug").dbg;
 var fmt = require("util").format;
+var remove_message = require("./util").remove_message;
+var deep_eaqual = require("./util").deep_eaqual;
 
 var g_inbox = {};
 var g_outbox = {};
@@ -16,8 +18,6 @@ var g_socketid_to_inbox = {}; // map socketid to all connected inbox
 
 var MAX_SOCKET_BUFFER_SIZE = 10000; // stop sending to socket if 
                                     // its buffer size >= it
-
-
 
 function global_data_reset()
 {
@@ -50,52 +50,6 @@ var gen_next_socket_id = (function (next_id) {
 			      return next_id;
 			  };})(0);
 
-function log_corrupt_msg(msg)
-{
-    console.log("[warn]:message corrupt:"+msg);
-}
-
-// decode and remove message from buffer obj[attr]
-
-function remove_message(obj,attr)
-{
-    attr = attr || "yamq_data";
-    var data = obj[attr];
-    var size;
-    var msg;
-    var msg_str;
-    var i = data.indexOf(":");
-    var j;
-    var inbox;
-    
-    if (i <= 0) {
-	if(isNaN(parseInt(data)))
-	    obj[attr] = "";
-	return null;
-    }
-    size = parseInt(data.slice(0,i));
-    if (typeof(size) != "number") {
-	// message is corrupt
-	log_corrupt_msg(data);
-	obj[attr] = ""; // reset it
-	return null;
-    }
-	
-    if ((i+1+size) > data.length) // waiting for more data
-	return null;
-    
-    msg_str = data.slice(i+1,i+1+size);
-    obj[attr] = data.slice(i+1+size);
-    try {
-	msg = JSON.parse(msg_str);
-    } catch (err) {
-	log_corrupt_msg(msg_str);
-	obj[attr] = "";
-	return null;
-    }
-
-    return msg;
-}
 
 // message format,
 // length:string
@@ -227,6 +181,17 @@ function on_connect(c)
              }
 
 	 });
+
+    c.on("error",function (e) {
+             console.log("Socket Error:"+JSON.stringify(e));
+             try {
+                 inbox_remove_consumer(c);    
+             } catch (x) {
+                 console.log("[Exception]:inbox_remove_consumer:"+
+                             JSON.stringify(x));
+             }
+         });
+
 }
 
 
@@ -263,43 +228,6 @@ function process_drain(socket)
 }
 
 
-// return true on equal, false otherwise
-
-function deep_eaqual(obj1,obj2)
-{
-    var t1 = typeof(obj1);
-    var t2 = typeof(obj2);
-    var i;
-    var attr;
-
-    if (t1 != t2) return false;
-    
-    if (t1 != "object")
-	return obj1 == obj2;
-    
-    if (obj1.length != undefined) { // array
-	if (obj2.length != obj1.length)
-	    return false;
-
-	for(i = 0; i < obj1.length; i++) {
-	    if (!deep_eaqual(obj1[i],obj2[i]))
-		return false;
-	}
-	return true;
-    } else if (obj2.length != undefined) {
-	return false;
-    } else {  // object
-	for(attr in obj1) {
-	    if (obj2[attr]==undefined || !deep_eaqual(obj1[attr],obj2[attr]))
-		return false;
-	}
-	for(attr in obj2) {
-	    if (obj1[attr]==undefined)
-		return false;
-	}
-	return true;
-    }
-}
 
 // return true,
 // if obj1 and obj2 are object and all obj1's attribute are deep equal to obj2's
@@ -456,6 +384,7 @@ function inbox_remove_consumer(socket)
 			+ name );
 	    continue;
 	}
+
 	for(j = 0; j < inbox.consumer.length; j++) {
 	    if (inbox.consumer[j] === socket) {
 		inbox.consumer.splice(j,1);
@@ -682,10 +611,11 @@ function send_to_inbox(inbox,message)
 	    if (policy == "drop_all") {
 		inbox.queue = [];
 		inbox.queue.push(message);
+                console.log("drop all:"+inbox.name);
 	    } else if (policy == "drop_old") {
 		inbox.queue.shift();
 		inbox.queue.push(message);
-	    } {// else drop the new one
+	    } else {// else drop the new one
 		dbg("mid","drop message:" + message);
 	    }
 	} else { // buf is available
@@ -708,44 +638,6 @@ function run(port)
 		  });
 }
 
-function test_remove_message()
-{
-    var c = {yamq_data:""};
-    var msg = remove_message(c);
-    var x;
-    
-    assert_true(msg == null && c.yamq_data=="");
-
-    c.yamq_data = '5:"foo"';
-    msg = remove_message(c);
-    assert_true(msg == "foo" && c.yamq_data=="");
-
-    c.yamq_data = '5:"foo"8:"foobar"';
-    msg = remove_message(c);
-    assert_true(msg == "foo" && c.yamq_data =='8:"foobar"');
-
-    c.yamq_data = '5:"foo';
-    msg = remove_message(c);
-    assert_true(msg == null && c.yamq_data == '5:"foo');
-
-    c.yamq_data = '5:"fooo';  // corrupt
-    msg = remove_message(c);
-    assert_true(msg == null && c.yamq_data == '');
-
-    c.yamq_data = 'foo';  // corrupt
-    msg = remove_message(c);
-    assert_true(msg == null && c.yamq_data == '');
-
-    x = {
-	foo:123,
-	bar:"4567",
-	baz:{foo:123,bar:"你好"}
-    };
-    c.yamq_data = encode_message(x);
-    msg = remove_message(c);
-    assert_true(deep_eaqual(x,msg) && c.yamq_data == "");
-    console.log("test_remove_message pass!");
-}
 
 function test_encode_message()
 {
@@ -762,29 +654,6 @@ function test_make_reply()
     assert_true(reply.id==3 && reply.body.foo == "foo");
 }
 
-function test_deep_eaqual()
-{
-    assert_true(deep_eaqual(1,1));
-    assert_true(deep_eaqual("foo","foo"));
-
-    assert_true(!deep_eaqual(1,2));
-    assert_true(!deep_eaqual("foo","foo1"));
-
-    assert_true(deep_eaqual(true,true));
-    assert_true(!deep_eaqual(true,false));
-
-    assert_true(deep_eaqual({foo:"foo"},{foo:"foo"}));
-    assert_true(!deep_eaqual({foo:"foo"},{foo:"foo1"}));
-
-    assert_true(deep_eaqual({foo:"foo",bar:"bar"},{foo:"foo",bar:"bar"}));
-    assert_true(!deep_eaqual({foo:"foo"},{foo:"foo",bar:"bar"}));
-    assert_true(!deep_eaqual({foo:"foo",bar:"bar"},{foo:"foo"}));
-
-    assert_true(deep_eaqual([1,2,3],[1,2,3]));
-    assert_true(deep_eaqual([],[]));
-    assert_true(!deep_eaqual([1,2,3],[1,2,3,4]));
-    assert_true(!deep_eaqual([1,2,3,4],[1,2,3]));
-}
 
 function test_obj_cmp1()
 {
@@ -1068,9 +937,7 @@ function test_process_drain()
 function test()
 {
     test_encode_message();
-    test_remove_message();
     test_make_reply();
-    test_deep_eaqual();
     test_obj_cmp1();
     test_make_inbox();
     test_make_outbox();

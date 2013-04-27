@@ -27,10 +27,10 @@ function empty() {}
 
 // generate a uniqe id
 var gen_next_id = (function(next) {
-                   var max_id = Number.MAX_VALUE/10;
-                   return function() {
-                       next = (next+1) % max_id;
-                       return next;};
+                       var max_id = Number.MAX_VALUE/10;
+                       return function() {
+                           next = (next+1) % max_id;
+                           return next;};
                })(0);
 
 function on_disconnect()
@@ -106,9 +106,10 @@ function on_subscribe(data)
                                  });
 }
 
+var g_inbox_name_prefix = "webapp_inbox_"+ new Date().getTime() +"_";
 function get_inbox_name(id)
 {
-    return "webapp_inbox_"+id;
+    return g_inbox_name_prefix + id;
 }
 
 function on_connection(socket)
